@@ -1,9 +1,16 @@
-Channels: 3452
-Checks: 1266
-Verified: 983
-Alternatives selected: 53
-Inconclusive: 217
+Channels: 3453
+Checks: 1295
+Verified: 968
+Alternatives selected: 69
+Inconclusive: 232
 Note: checks from GitHub may differ from TV playback due to geoblocking.
 Free-TV new channels: 620
 Free-TV streams: 869
 unknown country skipped: 1028
+History checked channels: 1200
+History verified channels: 968
+History inconclusive channels: 232
+Never checked channels: 2253
+Coverage percent: 34.8
+Verified among checked percent: 80.7
+History statuses represent last GitHub check, not guaranteed TV playback.

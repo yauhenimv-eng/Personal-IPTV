@@ -21,12 +21,12 @@ EXTERNAL = {
     "Free-TV": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
     "FreeCastHub": "https://raw.githubusercontent.com/freecasthub/public-iptv/main/playlist.m3u",
 }
-ATTR = re.compile(r'([\\w-]+)="([^"]*)"')
+ATTR = re.compile(r'([\w-]+)="([^"]*)"')
 def normalized(name):
     name = unicodedata.normalize("NFKC", name or "").casefold()
-    name = re.sub(r"\\[(?:[a-z]{2})\\]$", "", name).strip()
-    name = re.sub(r"\\b(?:hd|fhd|sd|uhd|4k)\\b", "", name)
-    return re.sub(r"[^\\w]+", "", name)
+    name = re.sub(r"\[(?:[a-z]{2})\]$", "", name).strip()
+    name = re.sub(r"\b(?:hd|fhd|sd|uhd|4k)\b", "", name)
+    return re.sub(r"[^\w]+", "", name)
 def external_entries(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Personal-IPTV/2.0"})
     with urllib.request.urlopen(req, timeout=35) as response:
@@ -103,11 +103,11 @@ def main():
                 if country == "uk":
                     country = "gb"
                 if country not in COUNTRIES:
-                    match = re.search(r"\\[([A-Za-z]{2})\\]$", name)
+                    match = re.search(r"\[([A-Za-z]{2})\]$", name)
                     if match:
                         country = match.group(1).lower()
                 if country not in COUNTRIES:
-                    match = re.search(r"\\.([A-Za-z]{2})$", cid)
+                    match = re.search(r"\.([A-Za-z]{2})$", cid)
                     if match:
                         country = match.group(1).lower()
                 if cid in selected:
@@ -252,7 +252,7 @@ def main():
     report = (f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\n"
               f"Alternatives selected: {replaced}\nInconclusive: {uncertain}\n"
               "Note: checks from GitHub may differ from TV playback due to geoblocking.\n")
-    report += "".join(f"{key}: {value}\\n" for key, value in sorted(source_stats.items()))
+    report += "".join(f"{key}: {value}\n" for key, value in sorted(source_stats.items()))
     Path("IPTV_report.txt").write_text(report, encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":

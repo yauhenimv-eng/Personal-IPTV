@@ -13,7 +13,7 @@ from pathlib import Path
 COUNTRIES = ("by", "ru", "ua", "gb", "pl", "de", "fr", "it", "es", "nl", "cz", "ro")
 BASE = "https://iptv-epg.org/files/epg-{}.xml"
 ATTR = re.compile(r'tvg-id="([^"]+)"')
-MAX_BYTES = 70_000_000
+MAX_BYTES = 250_000_000
 
 def main():
     playlist = Path("playlist.m3u").read_text(encoding="utf-8-sig")
@@ -32,7 +32,7 @@ def main():
                 payload = response.read(MAX_BYTES + 1)
             if len(payload) > MAX_BYTES:
                 raise ValueError("XMLTV source exceeds size limit")
-            if payload[:2] == b"\\x1f\\x8b":
+            if payload[:2] == b"\x1f\x8b":
                 payload = gzip.decompress(payload)
             document = ET.fromstring(payload)
             if document.tag != "tv":

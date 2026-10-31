@@ -286,14 +286,14 @@ def main():
     never_checked = len(active_ids) - len(checked_ids)
     coverage = 100 * len(checked_ids) / len(active_ids)
     success = 100 * len(working_ids) / len(checked_ids) if checked_ids else 0
-    report += (f"History checked channels: {len(checked_ids)}\\n"
-               f"History verified channels: {len(working_ids)}\\n"
-               f"History inconclusive channels: {len(unknown_ids)}\\n"
-               f"Never checked channels: {never_checked}\\n"
-               f"Coverage percent: {coverage:.1f}\\n"
-               f"Verified among checked percent: {success:.1f}\\n"
-               "History statuses represent last GitHub check, not guaranteed TV playback.\\n")
-    history_path.write_text(json.dumps(history, ensure_ascii=False, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+    report += (f"History checked channels: {len(checked_ids)}\n"
+               f"History verified channels: {len(working_ids)}\n"
+               f"History inconclusive channels: {len(unknown_ids)}\n"
+               f"Never checked channels: {never_checked}\n"
+               f"Coverage percent: {coverage:.1f}\n"
+               f"Verified among checked percent: {success:.1f}\n"
+               "History statuses represent last GitHub check, not guaranteed TV playback.\n")
+    history_path.write_text(json.dumps(history, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     Path("IPTV_report.txt").write_text(report, encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":

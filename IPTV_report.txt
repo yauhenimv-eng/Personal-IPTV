@@ -1,0 +1,6 @@
+Channels: 2909
+Checks: 1300
+Verified: 952
+Alternatives selected: 58
+Inconclusive: 248
+Note: checks from GitHub may differ from TV playback due to geoblocking.

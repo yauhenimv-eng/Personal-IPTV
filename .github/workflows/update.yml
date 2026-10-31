@@ -28,8 +28,8 @@ jobs:
         run: python build_iptv.py
       - name: Commit updated playlist
         run: |
-          git add playlist.m3u IPTV_report.txt
-          if git diff --cached --quiet -- playlist.m3u IPTV_report.txt; then
+          git add playlist.m3u IPTV_report.txt IPTV_health.json
+          if git diff --cached --quiet -- playlist.m3u IPTV_report.txt IPTV_health.json; then
             echo "Playlist unchanged"
             exit 0
           fi

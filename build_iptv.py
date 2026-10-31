@@ -176,7 +176,10 @@ def main():
     path = Path("playlist.m3u")
     path.write_text("#EXTM3U\n" + "\n".join(x[3] for x in entries) + "\n", encoding="utf-8")
     print(f"Created {path}: {len(entries)} channels; probes={checked}; verified={verified}; replacements={replaced}; inconclusive={uncertain}")
-    Path("IPTV_report.txt").write_text(f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\nAlternatives selected: {replaced}\nInconclusive: {uncertain}\nNote: checks from GitHub may differ from TV playback due to geoblocking.\n", encoding="utf-8")
+    report = (f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\n"
+              f"Alternatives selected: {replaced}\nInconclusive: {uncertain}\n"
+              "Note: checks from GitHub may differ from TV playback due to geoblocking.\n")
+    Path("IPTV_report.txt").write_text(report, encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build an M3U playlist from public IPTV-org metadata (not a stream relay)."""
 import json
+import datetime
 import re
 import unicodedata
 from collections import Counter
@@ -179,6 +180,18 @@ def main():
         except (OSError, subprocess.TimeoutExpired):
             pass
         return "uncertain"
+    # Persisted per-channel verification history across daily runs.
+    history_path = Path("IPTV_health.json")
+    try:
+        history = json.loads(history_path.read_text(encoding="utf-8")) if history_path.exists() else {}
+        if not isinstance(history, dict):
+            history = {}
+    except (ValueError, OSError):
+        history = {}
+    today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    for cid, item in list(history.items()):
+        if cid not in selected or not isinstance(item, dict):
+            history.pop(cid, None)
     # Keep the daily run bounded and avoid flooding third-party servers.
     # Prefer the existing working selection and probe alternates on demand.
     checked, verified, replaced, uncertain = 0, 0, 0, 0
@@ -186,15 +199,19 @@ def main():
     max_checks = int(os.getenv("IPTV_MAX_CHECKS", "1200"))
     tasks = []
     for cid, (_, best, channel, category) in selected.items():
+        known = history.get(cid, {})
+        preferred = known.get("last_good_url") if known.get("last_good_url") in options.get(cid, ()) else old.get(cid, best)
         candidates = sorted(options.get(cid, ()), key=lambda u: (
-            u != old.get(cid, best), not u.startswith("https://"),
+            u != preferred,
             not u.lower().split("?", 1)[0].endswith(".m3u8"), u))
         tasks.append((cid, candidates[:4]))
     # A bounded worker pool checks the preferred URL; alternative URLs are
     # checked only when the preferred one is definitively bad or inconclusive.
     def choose(item):
         cid, urls = item
-        fallback = old.get(cid) if old.get(cid) in options.get(cid, ()) else selected[cid][1]
+        known = history.get(cid, {})
+        good = known.get("last_good_url")
+        fallback = good if good in options.get(cid, ()) else (old.get(cid) if old.get(cid) in options.get(cid, ()) else selected[cid][1])
         if not urls:
             return cid, fallback, "uncertain", 0
         attempts = 0
@@ -206,8 +223,8 @@ def main():
             if status == "ok":
                 return cid, url, "ok", attempts
         return cid, fallback, "uncertain", attempts
-    offset = (int(time.time() // 86400) * max_checks) % len(tasks) if tasks and max_checks else 0
-    tasks = tasks[offset:] + tasks[:offset]
+    # Oldest/never-checked channels first; guarantees progressive coverage.
+    tasks.sort(key=lambda item: (history.get(item[0], {}).get("last_checked", ""), item[0]))
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
         futures = []
         for item in tasks[:max_checks]:
@@ -215,12 +232,21 @@ def main():
         for future in concurrent.futures.as_completed(futures):
             cid, url, status, count = future.result()
             checked += count
+            known = history.get(cid, {})
+            known["last_checked"] = today
+            known["last_result"] = status
+            known["checks"] = int(known.get("checks", 0)) + 1
             if status == "ok":
+                known["last_good_url"] = url
+                known["last_good_date"] = today
+                known["failures"] = 0
                 verified += 1
                 if url != selected[cid][1]:
                     replaced += 1
             else:
+                known["failures"] = int(known.get("failures", 0)) + 1
                 uncertain += 1
+            history[cid] = known
             rank, _, channel, category = selected[cid]
             selected[cid] = (rank, url, channel, category)
     entries = []
@@ -253,6 +279,21 @@ def main():
               f"Alternatives selected: {replaced}\nInconclusive: {uncertain}\n"
               "Note: checks from GitHub may differ from TV playback due to geoblocking.\n")
     report += "".join(f"{key}: {value}\n" for key, value in sorted(source_stats.items()))
+    active_ids = [item[2] for item in entries]
+    checked_ids = [cid for cid in active_ids if history.get(cid, {}).get("last_checked")]
+    working_ids = [cid for cid in checked_ids if history[cid].get("last_result") == "ok"]
+    unknown_ids = [cid for cid in checked_ids if history[cid].get("last_result") == "uncertain"]
+    never_checked = len(active_ids) - len(checked_ids)
+    coverage = 100 * len(checked_ids) / len(active_ids)
+    success = 100 * len(working_ids) / len(checked_ids) if checked_ids else 0
+    report += (f"History checked channels: {len(checked_ids)}\\n"
+               f"History verified channels: {len(working_ids)}\\n"
+               f"History inconclusive channels: {len(unknown_ids)}\\n"
+               f"Never checked channels: {never_checked}\\n"
+               f"Coverage percent: {coverage:.1f}\\n"
+               f"Verified among checked percent: {success:.1f}\\n"
+               "History statuses represent last GitHub check, not guaranteed TV playback.\\n")
+    history_path.write_text(json.dumps(history, ensure_ascii=False, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
     Path("IPTV_report.txt").write_text(report, encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":

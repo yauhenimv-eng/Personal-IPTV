@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://iptv-org.github.io/api"
-EPG_URL = "https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz"
+EPG_URL = "https://raw.githubusercontent.com/yauhenimv-eng/Personal-IPTV/main/epg.xml"
 COUNTRIES = {"by", "ru", "ua", "gb", "de", "fr", "pl", "it", "es", "pt", "nl", "be", "ch", "at", "cz", "sk", "hu", "ro", "bg", "gr", "se", "no", "dk", "fi", "ie", "ee", "lv", "lt"}
 CATEGORIES = {"news", "movies", "sports", "kids", "music", "documentary", "education", "entertainment", "animation", "series", "general", "lifestyle", "culture", "travel", "science", "comedy"}
 LABELS = {"news": "Новости", "movies": "Фильмы", "sports": "Спорт", "kids": "Детские", "music": "Музыка", "documentary": "Познавательные", "education": "Познавательные", "science": "Познавательные", "travel": "Познавательные", "entertainment": "Развлекательные", "general": "Общие"}

@@ -59,10 +59,10 @@ def main():
         raise RuntimeError("No usable EPG data; check XMLTV providers")
     ET.ElementTree(root).write("epg.xml", encoding="utf-8", xml_declaration=True)
     with Path("IPTV_report.txt").open("a", encoding="utf-8") as report:
-        report.write(f"EPG sources available: {sources_ok}\\n")
-        report.write(f"EPG matched channel IDs: {len(found)}\\n")
-        report.write(f"EPG programme entries: {programmes}\\n")
-        report.write(f"EPG coverage percent: {100*len(found)/len(wanted):.1f}\\n")
+        report.write(f"EPG sources available: {sources_ok}\n")
+        report.write(f"EPG matched channel IDs: {len(found)}\n")
+        report.write(f"EPG programme entries: {programmes}\n")
+        report.write(f"EPG coverage percent: {100*len(found)/len(wanted):.1f}\n")
     print(f"EPG: {len(found)} matched channels, {programmes} programmes")
 
 if __name__ == "__main__":

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Build an M3U playlist from public IPTV-org metadata (not a stream relay)."""
 import json
+import os
+import subprocess
+import time
+import concurrent.futures
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -51,6 +56,100 @@ def main():
         previous = selected.get(cid)
         if previous is None or rank > previous[0] or (rank == previous[0] and url < previous[1]):
             selected[cid] = (rank, url, channel, category)
+    # Bounded checks: preserve existing channel URLs when network is inconclusive.
+    # Check alternatives first; a temporary failure never removes a channel.
+    old = {}
+    previous = Path("playlist.m3u")
+    if previous.exists():
+        lines = previous.read_text(encoding="utf-8-sig").splitlines()
+        for i, line in enumerate(lines[:-1]):
+            if line.startswith("#EXTINF:") and 'tvg-id="' in line:
+                cid = line.split('tvg-id="', 1)[1].split('"', 1)[0]
+                old[cid] = lines[i + 1].strip()
+    options = {}
+    for stream in streams:
+        cid, url = stream.get("channel"), (stream.get("url") or "").strip()
+        if cid in selected and url.startswith(("http://", "https://")):
+            options.setdefault(cid, set()).add(url)
+    def probe(url):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-8191"})
+            with urllib.request.urlopen(req, timeout=4) as res:
+                chunk = res.read(8192)
+                mime = res.headers.get("Content-Type", "").lower()
+                if not chunk:
+                    return "uncertain"
+                if b"#EXTM3U" in chunk[:256]:
+                    if b"#EXT-X-" in chunk:
+                        return "ok"
+                    return "uncertain"
+                if b"<html" in chunk[:512].lower():
+                    return "bad"
+                if "video/" in mime or "application/octet-stream" in mime or chunk[0] == 0x47:
+                    return "ok"
+                return "uncertain"
+        except urllib.error.HTTPError as e:
+            return "bad" if e.code in (404, 410) else "uncertain"
+        except Exception:
+            return "uncertain"
+    # FFprobe is used for ambiguous HTTP results only, and with a strict timeout.
+    def inspect(url):
+        state = probe(url)
+        if state != "uncertain":
+            return state
+        try:
+            p = subprocess.run(
+                ["ffprobe", "-v", "error", "-rw_timeout", "3000000",
+                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", url],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=5, text=True)
+            if p.returncode == 0 and any(x in p.stdout for x in ("video", "audio")):
+                return "ok"
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return "uncertain"
+    # Keep the daily run bounded and avoid flooding third-party servers.
+    # Prefer the existing working selection and probe alternates on demand.
+    checked, verified, replaced, uncertain = 0, 0, 0, 0
+    deadline = time.monotonic() + int(os.getenv("IPTV_CHECK_BUDGET_SECONDS", "450"))
+    max_checks = int(os.getenv("IPTV_MAX_CHECKS", "1200"))
+    tasks = []
+    for cid, (_, best, channel, category) in selected.items():
+        candidates = sorted(options.get(cid, ()), key=lambda u: (
+            u != old.get(cid, best), not u.startswith("https://"),
+            not u.lower().split("?", 1)[0].endswith(".m3u8"), u))
+        tasks.append((cid, candidates[:4]))
+    # A bounded worker pool checks the preferred URL; alternative URLs are
+    # checked only when the preferred one is definitively bad or inconclusive.
+    def choose(item):
+        cid, urls = item
+        fallback = old.get(cid) if old.get(cid) in options.get(cid, ()) else selected[cid][1]
+        if not urls:
+            return cid, fallback, "uncertain", 0
+        attempts = 0
+        for url in urls:
+            if time.monotonic() > deadline:
+                break
+            attempts += 1
+            status = inspect(url)
+            if status == "ok":
+                return cid, url, "ok", attempts
+        return cid, fallback, "uncertain", attempts
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        futures = []
+        for item in tasks[:max_checks]:
+            futures.append(pool.submit(choose, item))
+        for future in concurrent.futures.as_completed(futures):
+            cid, url, status, count = future.result()
+            checked += count
+            if status == "ok":
+                verified += 1
+                if url != selected[cid][1]:
+                    replaced += 1
+            else:
+                uncertain += 1
+            rank, _, channel, category = selected[cid]
+            selected[cid] = (rank, url, channel, category)
     entries = []
     seen_urls = set()
     for cid, (_, url, channel, category) in selected.items():
@@ -76,7 +175,8 @@ def main():
     entries.sort()
     path = Path("playlist.m3u")
     path.write_text("#EXTM3U\n" + "\n".join(x[3] for x in entries) + "\n", encoding="utf-8")
-    print(f"Created {path}: {len(entries)} channels (one stream per channel ID)")
+    print(f"Created {path}: {len(entries)} channels; probes={checked}; verified={verified}; replacements={replaced}; inconclusive={uncertain}")
+    Path("IPTV_report.txt").write_text(f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\nAlternatives selected: {replaced}\nInconclusive: {uncertain}\nNote: checks from GitHub may differ from TV playback due to geoblocking.\n", encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":
     main()

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Build an M3U playlist from public IPTV-org metadata (not a stream relay)."""
 import json
+import re
+import unicodedata
+from collections import Counter
 import os
 import subprocess
 import time
@@ -13,6 +16,31 @@ BASE = "https://iptv-org.github.io/api"
 COUNTRIES = {"by", "ru", "ua", "gb", "de", "fr", "pl", "it", "es", "pt", "nl", "be", "ch", "at", "cz", "sk", "hu", "ro", "bg", "gr", "se", "no", "dk", "fi", "ie", "ee", "lv", "lt"}
 CATEGORIES = {"news", "movies", "sports", "kids", "music", "documentary", "education", "entertainment", "animation", "series", "general", "lifestyle", "culture", "travel", "science", "comedy"}
 LABELS = {"news": "Новости", "movies": "Фильмы", "sports": "Спорт", "kids": "Детские", "music": "Музыка", "documentary": "Познавательные", "education": "Познавательные", "science": "Познавательные", "travel": "Познавательные", "entertainment": "Развлекательные", "general": "Общие"}
+
+EXTERNAL = {
+    "Free-TV": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
+    "FreeCastHub": "https://raw.githubusercontent.com/freecasthub/public-iptv/main/playlist.m3u",
+}
+ATTR = re.compile(r'([\\w-]+)="([^"]*)"')
+def normalized(name):
+    name = unicodedata.normalize("NFKC", name or "").casefold()
+    name = re.sub(r"\\[(?:[a-z]{2})\\]$", "", name).strip()
+    name = re.sub(r"\\b(?:hd|fhd|sd|uhd|4k)\\b", "", name)
+    return re.sub(r"[^\\w]+", "", name)
+def external_entries(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Personal-IPTV/2.0"})
+    with urllib.request.urlopen(req, timeout=35) as response:
+        lines = response.read(12000000).decode("utf-8-sig", "replace").splitlines()
+    attrs = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("#EXTINF:"):
+            attrs = dict(ATTR.findall(line))
+            attrs["name"] = line.rsplit(",", 1)[-1].strip()
+        elif attrs is not None and line.startswith(("http://", "https://")):
+            yield attrs, line
+            attrs = None
+
 def fetch(name):
     req = urllib.request.Request(f"{BASE}/{name}.json", headers={"User-Agent": "Personal-IPTV/1.0"})
     with urllib.request.urlopen(req, timeout=60) as response:
@@ -56,6 +84,54 @@ def main():
         previous = selected.get(cid)
         if previous is None or rank > previous[0] or (rank == previous[0] and url < previous[1]):
             selected[cid] = (rank, url, channel, category)
+
+    options = {}
+    for stream in streams:
+        cid, url = stream.get("channel"), (stream.get("url") or "").strip()
+        if cid in selected and url.startswith(("http://", "https://")):
+            options.setdefault(cid, set()).add(url)
+    names = {}
+    for cid, (_, _, channel, _) in selected.items():
+        names.setdefault((str(channel.get("country") or "").lower(), normalized(channel.get("name") or cid)), cid)
+    source_stats = Counter()
+    for source, link in EXTERNAL.items():
+        try:
+            for attrs, url in external_entries(link):
+                cid = attrs.get("tvg-id") or ""
+                name = attrs.get("tvg-name") or attrs["name"]
+                country = (attrs.get("tvg-country") or attrs.get("country") or "").lower().split(";")[0].strip()
+                if country == "uk":
+                    country = "gb"
+                if country not in COUNTRIES:
+                    match = re.search(r"\\[([A-Za-z]{2})\\]$", name)
+                    if match:
+                        country = match.group(1).lower()
+                if country not in COUNTRIES:
+                    match = re.search(r"\\.([A-Za-z]{2})$", cid)
+                    if match:
+                        country = match.group(1).lower()
+                if cid in selected:
+                    target = cid
+                elif country in COUNTRIES and (country, normalized(name)) in names:
+                    target = names[(country, normalized(name))]
+                elif country in COUNTRIES and normalized(name):
+                    target = "external." + country + "." + normalized(name)
+                    if target not in selected:
+                        category = next((c for c in CATEGORIES if c in (attrs.get("group-title") or "").lower()), "general")
+                        selected[target] = ((0,), url, {"name": name, "country": country}, category)
+                        names[(country, normalized(name))] = target
+                        logos[target] = attrs.get("tvg-logo", "")
+                        source_stats[source + " new channels"] += 1
+                else:
+                    source_stats["unknown country skipped"] += 1
+                    continue
+                before = len(options.get(target, ()))
+                options.setdefault(target, set()).add(url)
+                if len(options[target]) > before:
+                    source_stats[source + " streams"] += 1
+        except Exception as error:
+            source_stats[source + " errors"] += 1
+            print(f"WARNING {source}: {error}")
     # Bounded checks: preserve existing channel URLs when network is inconclusive.
     # Check alternatives first; a temporary failure never removes a channel.
     old = {}
@@ -66,11 +142,6 @@ def main():
             if line.startswith("#EXTINF:") and 'tvg-id="' in line:
                 cid = line.split('tvg-id="', 1)[1].split('"', 1)[0]
                 old[cid] = lines[i + 1].strip()
-    options = {}
-    for stream in streams:
-        cid, url = stream.get("channel"), (stream.get("url") or "").strip()
-        if cid in selected and url.startswith(("http://", "https://")):
-            options.setdefault(cid, set()).add(url)
     def probe(url):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-8191"})
@@ -135,7 +206,9 @@ def main():
             if status == "ok":
                 return cid, url, "ok", attempts
         return cid, fallback, "uncertain", attempts
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    offset = (int(time.time() // 86400) * max_checks) % len(tasks) if tasks and max_checks else 0
+    tasks = tasks[offset:] + tasks[:offset]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
         futures = []
         for item in tasks[:max_checks]:
             futures.append(pool.submit(choose, item))
@@ -179,6 +252,7 @@ def main():
     report = (f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\n"
               f"Alternatives selected: {replaced}\nInconclusive: {uncertain}\n"
               "Note: checks from GitHub may differ from TV playback due to geoblocking.\n")
+    report += "".join(f"{key}: {value}\\n" for key, value in sorted(source_stats.items()))
     Path("IPTV_report.txt").write_text(report, encoding="utf-8")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":

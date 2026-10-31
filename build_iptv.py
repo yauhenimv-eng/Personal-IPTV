@@ -22,6 +22,7 @@ def main():
         cid = item.get("channel")
         if cid and item.get("url") and cid not in logos:
             logos[cid] = item["url"]
+    print(f"Source: {len(streams)} streams, {len(channels)} channels, {len(logos)} logos")
     entries = []
     seen_urls = set()
     for stream in streams:
@@ -29,20 +30,21 @@ def main():
         channel = channels.get(stream.get("channel"))
         if not url.startswith(("https://", "http://")) or not channel:
             continue
-        if channel.get("country") not in COUNTRIES or channel.get("is_nsfw"):
+        if str(channel.get("country") or "").lower() not in COUNTRIES or channel.get("is_nsfw"):
             continue
         cats = channel.get("categories") or ["general"]
         category = next((c for c in cats if c in CATEGORIES), None)
         if not category or url in seen_urls:
             continue
         seen_urls.add(url)
-        country = channel["country"].upper()
+        country = str(channel["country"]).upper()
         name = safe(channel.get("name") or stream.get("title") or stream["channel"])
         title = f"{name} [{country}]"
         logo = safe(logos.get(channel["id"], ""))
         group = safe(f"{country} | {LABELS.get(category, category.capitalize())}")
         tvgid = safe(channel["id"])
         entries.append((country, group, name.casefold(), f'#EXTINF:-1 tvg-id="{tvgid}" tvg-logo="{logo}" group-title="{group}",{title}\n{url}'))
+    print(f"Selected: {len(entries)} streams across requested countries/categories")
     if not entries:
         raise RuntimeError("No channels found. Existing playlist will not be overwritten.")
     entries.sort()

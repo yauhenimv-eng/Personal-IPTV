@@ -23,34 +23,60 @@ def main():
         if cid and item.get("url") and cid not in logos:
             logos[cid] = item["url"]
     print(f"Source: {len(streams)} streams, {len(channels)} channels, {len(logos)} logos")
-    entries = []
-    seen_urls = set()
+    # Keep one preferred stream per canonical IPTV-org channel ID.
+    # No network probing: preference is based on metadata, not verified playback.
+    selected = {}
+    candidates = 0
     for stream in streams:
         url = (stream.get("url") or "").strip()
-        channel = channels.get(stream.get("channel"))
+        cid = stream.get("channel")
+        channel = channels.get(cid)
         if not url.startswith(("https://", "http://")) or not channel:
             continue
         if str(channel.get("country") or "").lower() not in COUNTRIES or channel.get("is_nsfw"):
             continue
         cats = channel.get("categories") or ["general"]
         category = next((c for c in cats if c in CATEGORIES), None)
-        if not category or url in seen_urls:
+        if not category:
+            continue
+        candidates += 1
+        # Prefer secure HLS, then other HLS, then HTTPS, then HTTP.
+        # A stable URL tie-breaker prevents random daily playlist churn.
+        lower = url.lower().split("?", 1)[0]
+        hls = lower.endswith(".m3u8")
+        score = (int(url.startswith("https://") and hls),
+                 int(hls), int(url.startswith("https://")),
+                 int(bool(stream.get("quality"))))
+        rank = (score, -len(url))
+        previous = selected.get(cid)
+        if previous is None or rank > previous[0] or (rank == previous[0] and url < previous[1]):
+            selected[cid] = (rank, url, channel, category)
+    entries = []
+    seen_urls = set()
+    for cid, (_, url, channel, category) in selected.items():
+        if url in seen_urls:
             continue
         seen_urls.add(url)
         country = str(channel["country"]).upper()
-        name = safe(channel.get("name") or stream.get("title") or stream["channel"])
+        name = safe(channel.get("name") or cid)
         title = f"{name} [{country}]"
-        logo = safe(logos.get(channel["id"], ""))
-        group = safe(f"{country} | {LABELS.get(category, category.capitalize())}")
-        tvgid = safe(channel["id"])
-        entries.append((country, group, name.casefold(), f'#EXTINF:-1 tvg-id="{tvgid}" tvg-logo="{logo}" group-title="{group}",{title}\n{url}'))
-    print(f"Selected: {len(entries)} streams across requested countries/categories")
+        logo = safe(logos.get(cid, ""))
+        group = safe(LABELS.get(category, {
+            "series": "Фильмы и сериалы", "animation": "Детские",
+            "lifestyle": "Развлекательные", "comedy": "Развлекательные",
+            "culture": "Познавательные"
+        }.get(category, "Другие")))
+        if group == "Фильмы":
+            group = "Фильмы и сериалы"
+        tvgid = safe(cid)
+        entries.append((group, name.casefold(), cid, f'#EXTINF:-1 tvg-id="{tvgid}" tvg-logo="{logo}" group-title="{group}",{title}\n{url}'))
+    print(f"Eligible streams: {candidates}; distinct channel IDs: {len(selected)}; output channels: {len(entries)}")
     if not entries:
         raise RuntimeError("No channels found. Existing playlist will not be overwritten.")
     entries.sort()
     path = Path("playlist.m3u")
     path.write_text("#EXTM3U\n" + "\n".join(x[3] for x in entries) + "\n", encoding="utf-8")
-    print(f"Created {path}: {len(entries)} unique stream URLs")
+    print(f"Created {path}: {len(entries)} channels (one stream per channel ID)")
     print("Note: public listings do not guarantee authorization, availability, or regional access.")
 if __name__ == "__main__":
     main()

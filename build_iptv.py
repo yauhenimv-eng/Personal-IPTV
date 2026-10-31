@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://iptv-org.github.io/api"
+EPG_URL = "https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz"
 COUNTRIES = {"by", "ru", "ua", "gb", "de", "fr", "pl", "it", "es", "pt", "nl", "be", "ch", "at", "cz", "sk", "hu", "ro", "bg", "gr", "se", "no", "dk", "fi", "ie", "ee", "lv", "lt"}
 CATEGORIES = {"news", "movies", "sports", "kids", "music", "documentary", "education", "entertainment", "animation", "series", "general", "lifestyle", "culture", "travel", "science", "comedy"}
 LABELS = {"news": "Новости", "movies": "Фильмы", "sports": "Спорт", "kids": "Детские", "music": "Музыка", "documentary": "Познавательные", "education": "Познавательные", "science": "Познавательные", "travel": "Познавательные", "entertainment": "Развлекательные", "general": "Общие"}
@@ -273,7 +274,7 @@ def main():
         raise RuntimeError("No channels found. Existing playlist will not be overwritten.")
     entries.sort()
     path = Path("playlist.m3u")
-    path.write_text("#EXTM3U\n" + "\n".join(x[3] for x in entries) + "\n", encoding="utf-8")
+    path.write_text(f'#EXTM3U x-tvg-url="{EPG_URL}" url-tvg="{EPG_URL}"\n' + "\n".join(x[3] for x in entries) + "\n", encoding="utf-8")
     print(f"Created {path}: {len(entries)} channels; probes={checked}; verified={verified}; replacements={replaced}; inconclusive={uncertain}")
     report = (f"Channels: {len(entries)}\nChecks: {checked}\nVerified: {verified}\n"
               f"Alternatives selected: {replaced}\nInconclusive: {uncertain}\n"

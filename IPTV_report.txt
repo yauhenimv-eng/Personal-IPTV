@@ -1,6 +1,9 @@
-Channels: 2909
-Checks: 1300
-Verified: 952
-Alternatives selected: 58
-Inconclusive: 248
+Channels: 3452
+Checks: 1266
+Verified: 983
+Alternatives selected: 53
+Inconclusive: 217
 Note: checks from GitHub may differ from TV playback due to geoblocking.
+Free-TV new channels: 620
+Free-TV streams: 869
+unknown country skipped: 1028

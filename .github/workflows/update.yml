@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'build_iptv.py'
+      - 'build_epg.py'
       - '.github/workflows/update.yml'
   workflow_dispatch:
   schedule:
@@ -26,10 +27,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Generate M3U
         run: python build_iptv.py
+      - name: Build XMLTV EPG
+        run: python build_epg.py
       - name: Commit updated playlist
         run: |
-          git add playlist.m3u IPTV_report.txt IPTV_health.json
-          if git diff --cached --quiet -- playlist.m3u IPTV_report.txt IPTV_health.json; then
+          git add playlist.m3u IPTV_report.txt IPTV_health.json epg.xml
+          if git diff --cached --quiet -- playlist.m3u IPTV_report.txt IPTV_health.json epg.xml; then
             echo "Playlist unchanged"
             exit 0
           fi

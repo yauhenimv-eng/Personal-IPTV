@@ -1,20 +1,20 @@
 Channels: 3463
-Checks: 1249
-Verified: 959
+Checks: 1236
+Verified: 808
 Alternatives selected: 41
-Inconclusive: 241
+Inconclusive: 392
 Note: checks from GitHub may differ from TV playback due to geoblocking.
-Free-TV new channels: 624
+Free-TV new channels: 626
 Free-TV streams: 877
 unknown country skipped: 1028
 History checked channels: 3463
-History verified channels: 2622
-History inconclusive channels: 841
+History verified channels: 2626
+History inconclusive channels: 837
 Never checked channels: 0
 Coverage percent: 100.0
-Verified among checked percent: 75.7
+Verified among checked percent: 75.8
 History statuses represent last GitHub check, not guaranteed TV playback.
 EPG sources available: 12
-EPG matched channel IDs: 389
-EPG programme entries: 62518
-EPG coverage percent: 11.2
+EPG matched channel IDs: 390
+EPG programme entries: 57237
+EPG coverage percent: 11.3
